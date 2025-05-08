@@ -1,0 +1,276 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>SiteRaw Image Tileset Divider</title>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            max-width: 1000px;
+            margin: 0 auto;
+            padding: 20px;
+        }
+        .container {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 20px;
+        }
+        .controls {
+            flex: 1;
+            min-width: 300px;
+        }
+        .preview {
+            flex: 2;
+            min-width: 400px;
+        }
+        canvas {
+            max-width: 100%;
+            border: 1px solid #ccc;
+            background-color: #f5f5f5;
+        }
+        label, input, button {
+            display: block;
+            margin-bottom: 10px;
+        }
+        input {
+            width: 100%;
+            padding: 8px;
+            box-sizing: border-box;
+        }
+        button {
+            padding: 10px 15px;
+            background-color: #4CAF50;
+            color: white;
+            border: none;
+            cursor: pointer;
+        }
+        button:hover {
+            background-color: #45a049;
+        }
+        .tile-info {
+            margin-top: 20px;
+            padding: 10px;
+            background-color: #f0f0f0;
+            border-radius: 5px;
+        }
+        .possible-divisions {
+            margin-top: 20px;
+        }
+        .division {
+            cursor: pointer;
+            padding: 5px;
+            margin: 2px;
+            background-color: #e0e0e0;
+            display: inline-block;
+        }
+        .division:hover {
+            background-color: #d0d0d0;
+        }
+    </style>
+</head>
+<body>
+    <h1>Image Tileset Divider</h1>
+    <div class="container">
+        <div class="controls">
+            <label for="imageInput">Select an image:</label>
+            <input type="file" id="imageInput" accept="image/*">
+            
+            <label for="cols">Columns:</label>
+            <input type="number" id="cols" min="1" value="8">
+            
+            <label for="rows">Rows:</label>
+            <input type="number" id="rows" min="1" value="4">
+            
+            <button id="updateBtn">Update Tiles</button>
+            <button id="downloadBtn">Download Tileset</button>
+            
+            <div class="tile-info">
+                <h3>Tile Information</h3>
+                <p>Image Size: <span id="imgSize">-</span></p>
+                <p>Tile Size: <span id="tileSize">-</span></p>
+                <p>Number of Tiles: <span id="tileCount">-</span></p>
+            </div>
+            
+            <div class="possible-divisions">
+                <h3>Possible Divisions</h3>
+                <div id="divisionsList"></div>
+            </div>
+        </div>
+        <div class="preview">
+            <h2>Preview</h2>
+            <canvas id="previewCanvas"></canvas>
+        </div>
+    </div>
+
+    <script>
+        // DOM elements
+        const imageInput = document.getElementById('imageInput');
+        const colsInput = document.getElementById('cols');
+        const rowsInput = document.getElementById('rows');
+        const updateBtn = document.getElementById('updateBtn');
+        const downloadBtn = document.getElementById('downloadBtn');
+        const previewCanvas = document.getElementById('previewCanvas');
+        const ctx = previewCanvas.getContext('2d');
+        const imgSizeSpan = document.getElementById('imgSize');
+        const tileSizeSpan = document.getElementById('tileSize');
+        const tileCountSpan = document.getElementById('tileCount');
+        const divisionsList = document.getElementById('divisionsList');
+        
+        // Image data
+        let originalImage = null;
+        let imageWidth = 0;
+        let imageHeight = 0;
+        
+        // Load image when selected
+        imageInput.addEventListener('change', function(e) {
+            if (e.target.files && e.target.files[0]) {
+                const reader = new FileReader();
+                reader.onload = function(event) {
+                    const img = new Image();
+                    img.onload = function() {
+                        originalImage = img;
+                        imageWidth = img.width;
+                        imageHeight = img.height;
+                        imgSizeSpan.textContent = `${imageWidth} × ${imageHeight} px`;
+                        updatePossibleDivisions();
+                        updateTiles();
+                    };
+                    img.src = event.target.result;
+                };
+                reader.readAsDataURL(e.target.files[0]);
+            }
+        });
+        
+        // Update tiles when inputs change or button is clicked
+        colsInput.addEventListener('input', updateTiles);
+        rowsInput.addEventListener('input', updateTiles);
+        updateBtn.addEventListener('click', updateTiles);
+        
+        // Calculate possible divisions
+        function updatePossibleDivisions() {
+            if (!originalImage) return;
+            
+            divisionsList.innerHTML = '';
+            const divisors = findCommonDivisors(imageWidth, imageHeight);
+            
+            divisors.forEach(div => {
+                const cols = imageWidth / div;
+                const rows = imageHeight / div;
+                const divElement = document.createElement('div');
+                divElement.className = 'division';
+                divElement.textContent = `${cols}×${rows} (${div}px tiles)`;
+                divElement.addEventListener('click', () => {
+                    colsInput.value = cols;
+                    rowsInput.value = rows;
+                    updateTiles();
+                });
+                divisionsList.appendChild(divElement);
+            });
+        }
+        
+        // Find common divisors of width and height
+        function findCommonDivisors(width, height) {
+            const widthDivisors = findDivisors(width);
+            const heightDivisors = findDivisors(height);
+            const common = [];
+            
+            // Find common divisors (excluding 1)
+            for (let i = widthDivisors.length - 1; i >= 0; i--) {
+                if (heightDivisors.includes(widthDivisors[i])) {
+                    common.push(widthDivisors[i]);
+                }
+            }
+            
+            return common;
+        }
+        
+        // Find all divisors of a number
+        function findDivisors(num) {
+            const divisors = [];
+            for (let i = 1; i <= Math.min(num, 64); i++) {
+                if (num % i === 0) {
+                    divisors.push(i);
+                }
+            }
+            return divisors;
+        }
+        
+        // Update the tiles display
+        function updateTiles() {
+            if (!originalImage) return;
+            
+            const cols = parseInt(colsInput.value);
+            const rows = parseInt(rowsInput.value);
+            
+            if (isNaN(cols) || isNaN(rows) || cols <= 0 || rows <= 0) {
+                alert('Please enter valid numbers for columns and rows');
+                return;
+            }
+            
+            const tileWidth = Math.floor(imageWidth / cols);
+            const tileHeight = Math.floor(imageHeight / rows);
+            
+            // Update canvas size
+            previewCanvas.width = imageWidth;
+            previewCanvas.height = imageHeight;
+            
+            // Draw original image
+            ctx.drawImage(originalImage, 0, 0);
+            
+            // Draw grid and numbers
+            ctx.strokeStyle = 'rgba(255, 0, 0, 0.5)';
+            ctx.lineWidth = 1;
+            ctx.font = `${Math.min(tileWidth, tileHeight) / 5}px Arial`;
+            ctx.textAlign = 'center';
+            ctx.textBaseline = 'middle';
+            ctx.fillStyle = 'red';
+            
+            let tileNumber = 1;
+            
+            for (let y = 0; y < rows; y++) {
+                for (let x = 0; x < cols; x++) {
+                    // Draw grid
+                    ctx.strokeRect(
+                        x * tileWidth,
+                        y * tileHeight,
+                        tileWidth,
+                        tileHeight
+                    );
+                    
+                    // Draw number
+                    ctx.fillText(
+                        tileNumber.toString(),
+                        x * tileWidth + tileWidth / 2,
+                        y * tileHeight + tileHeight / 2
+                    );
+                    
+                    tileNumber++;
+                }
+            }
+            
+            // Update info
+            tileSizeSpan.textContent = `${tileWidth} × ${tileHeight} px`;
+            tileCountSpan.textContent = cols * rows;
+        }
+        
+        // Download tileset
+        downloadBtn.addEventListener('click', function() {
+            if (!originalImage) {
+                alert('Please load an image first');
+                return;
+            }
+            
+            const cols = parseInt(colsInput.value);
+            const rows = parseInt(rowsInput.value);
+            const tileWidth = Math.floor(imageWidth / cols);
+            const tileHeight = Math.floor(imageHeight / rows);
+            
+            // Create a zip file with all tiles
+            alert('This would normally download a ZIP file with all tiles.\n' +
+                  `Download a ZIP with ${cols * rows} tiles of ${tileWidth}×${tileHeight}px each.`);
+            
+        });
+    </script>
+</body>
+</html>
