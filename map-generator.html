@@ -1,0 +1,351 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>SiteRaw TileSet Editor</title>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            margin: 20px;
+        }
+        .controls {
+            margin-bottom: 20px;
+            padding: 15px;
+            background: #f0f0f0;
+            border-radius: 5px;
+        }
+        .control-group {
+            margin-bottom: 10px;
+        }
+        label {
+            display: inline-block;
+            width: 100px;
+        }
+        input, button {
+            padding: 5px;
+            margin-right: 10px;
+        }
+        button {
+            cursor: pointer;
+        }
+        #tileset-container {
+            overflow: auto;
+            margin-top: 20px;
+        }
+        #tileset-grid {
+            display: grid;
+            gap: 1px;
+            background: #ccc;
+            border: 1px solid #ccc;
+        }
+        .tile {
+            width: 30px;
+            height: 30px;
+            background: #fff;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            cursor: pointer;
+            user-select: none;
+        }
+        .tile.selected {
+            background: #a0c4ff;
+        }
+        #json-output {
+            width: 100%;
+            height: 200px;
+            margin-top: 20px;
+            font-family: monospace;
+        }
+        .range-controls {
+            margin-top: 15px;
+            padding-top: 15px;
+            border-top: 1px solid #ddd;
+        }
+    </style>
+</head>
+<body>
+    <h1>TileSet Editor</h1>
+    
+    <div class="controls">
+        <div class="control-group">
+            <label for="width">Width:</label>
+            <input type="number" id="width" min="1" max="100" value="16">
+            
+            <label for="height">Height:</label>
+            <input type="number" id="height" min="1" max="100" value="20">
+            
+            <label for="default">Default:</label>
+            <input type="number" id="default" value="2">
+            
+            <button id="create-btn">Create TileSet</button>
+        </div>
+        
+        <div class="control-group">
+            <label for="tile-value">Tile Value:</label>
+            <input type="number" id="tile-value" value="2">
+            <button id="fill-selected">Fill Selected</button>
+            <button id="fill-all">Fill All</button>
+        </div>
+        
+        <div class="range-controls">
+            <h3>Range Operations</h3>
+            <div>
+                <label for="x1">X1:</label>
+                <input type="number" id="x1" min="0" value="0">
+                
+                <label for="y1">Y1:</label>
+                <input type="number" id="y1" min="0" value="0">
+                
+                <label for="x2">X2:</label>
+                <input type="number" id="x2" min="0" value="0">
+                
+                <label for="y2">Y2:</label>
+                <input type="number" id="y2" min="0" value="0">
+                
+                <button id="select-range">Select Range</button>
+                <button id="fill-range">Fill Range</button>
+            </div>
+            <div style="margin-top: 10px;">
+                <button id="select-row">Select Row</button>
+                <input type="number" id="row-number" min="0" value="0">
+                
+                <button id="select-col">Select Column</button>
+                <input type="number" id="col-number" min="0" value="0">
+            </div>
+        </div>
+    </div>
+    
+    <div id="tileset-container">
+        <div id="tileset-grid"></div>
+    </div>
+    
+    <h3>JSON Output</h3>
+    <textarea id="json-output" readonly></textarea>
+    <button id="copy-json">Copy JSON</button>
+    
+    <script type="text/javascript">
+        // DOM elements
+        const widthInput = document.getElementById('width');
+        const heightInput = document.getElementById('height');
+        const defaultInput = document.getElementById('default');
+        const createBtn = document.getElementById('create-btn');
+        const tileValueInput = document.getElementById('tile-value');
+        const fillSelectedBtn = document.getElementById('fill-selected');
+        const fillAllBtn = document.getElementById('fill-all');
+        const tilesetGrid = document.getElementById('tileset-grid');
+        const jsonOutput = document.getElementById('json-output');
+        const copyJsonBtn = document.getElementById('copy-json');
+        
+        // Range controls
+        const x1Input = document.getElementById('x1');
+        const y1Input = document.getElementById('y1');
+        const x2Input = document.getElementById('x2');
+        const y2Input = document.getElementById('y2');
+        const selectRangeBtn = document.getElementById('select-range');
+        const fillRangeBtn = document.getElementById('fill-range');
+        const selectRowBtn = document.getElementById('select-row');
+        const rowNumberInput = document.getElementById('row-number');
+        const selectColBtn = document.getElementById('select-col');
+        const colNumberInput = document.getElementById('col-number');
+        
+        // State
+        let tileset = [];
+        let selectedTiles = [];
+        
+        // Initialize
+        createBtn.addEventListener('click', createTileSet);
+        fillSelectedBtn.addEventListener('click', fillSelectedTiles);
+        fillAllBtn.addEventListener('click', fillAllTiles);
+        copyJsonBtn.addEventListener('click', copyJsonToClipboard);
+        
+        // Range operations
+        selectRangeBtn.addEventListener('click', selectRange);
+        fillRangeBtn.addEventListener('click', fillRange);
+        selectRowBtn.addEventListener('click', selectRow);
+        selectColBtn.addEventListener('click', selectColumn);
+        
+        // Create a new tileset
+        function createTileSet() {
+            const width = parseInt(widthInput.value);
+            const height = parseInt(heightInput.value);
+            const defaultValue = parseInt(defaultInput.value);
+            
+            // Initialize tileset data
+            tileset = [];
+            for (let y = 0; y < height; y++) {
+                const row = [];
+                for (let x = 0; x < width; x++) {
+                    row.push(defaultValue);
+                }
+                tileset.push(row);
+            }
+            
+            // Render the grid
+            renderGrid();
+            updateJsonOutput();
+        }
+        
+        // Render the grid based on current tileset
+        function renderGrid() {
+            tilesetGrid.innerHTML = '';
+            tilesetGrid.style.gridTemplateColumns = `repeat(${tileset[0]?.length || 0}, 30px)`;
+            
+            tileset.forEach((row, y) => {
+                row.forEach((value, x) => {
+                    const tile = document.createElement('div');
+                    tile.className = 'tile';
+                    tile.textContent = value;
+                    tile.dataset.x = x;
+                    tile.dataset.y = y;
+                    
+                    // Check if this tile is selected
+                    if (selectedTiles.some(t => t.x === x && t.y === y)) {
+                        tile.classList.add('selected');
+                    }
+                    
+                    tile.addEventListener('click', (e) => {
+                        if (e.shiftKey) {
+                            // Shift-click to select multiple tiles
+                            toggleTileSelection(x, y);
+                        } else {
+                            // Regular click to select single tile
+                            selectSingleTile(x, y);
+                        }
+                    });
+                    
+                    tilesetGrid.appendChild(tile);
+                });
+            });
+        }
+        
+        // Tile selection functions
+        function selectSingleTile(x, y) {
+            selectedTiles = [{x, y}];
+            renderGrid();
+        }
+        
+        function toggleTileSelection(x, y) {
+            const index = selectedTiles.findIndex(t => t.x === x && t.y === y);
+            if (index >= 0) {
+                selectedTiles.splice(index, 1);
+            } else {
+                selectedTiles.push({x, y});
+            }
+            renderGrid();
+        }
+        
+        function clearSelection() {
+            selectedTiles = [];
+            renderGrid();
+        }
+        
+        // Fill operations
+        function fillSelectedTiles() {
+            const value = parseInt(tileValueInput.value);
+            selectedTiles.forEach(({x, y}) => {
+                tileset[y][x] = value;
+            });
+            renderGrid();
+            updateJsonOutput();
+        }
+        
+        function fillAllTiles() {
+            const value = parseInt(tileValueInput.value);
+            tileset = tileset.map(row => row.map(() => value));
+            renderGrid();
+            updateJsonOutput();
+        }
+        
+        // Range operations
+        function selectRange() {
+            const x1 = parseInt(x1Input.value);
+            const y1 = parseInt(y1Input.value);
+            const x2 = parseInt(x2Input.value);
+            const y2 = parseInt(y2Input.value);
+            
+            selectedTiles = [];
+            
+            const startX = Math.min(x1, x2);
+            const endX = Math.max(x1, x2);
+            const startY = Math.min(y1, y2);
+            const endY = Math.max(y1, y2);
+            
+            for (let y = startY; y <= endY; y++) {
+                for (let x = startX; x <= endX; x++) {
+                    if (y >= 0 && y < tileset.length && x >= 0 && x < tileset[0].length) {
+                        selectedTiles.push({x, y});
+                    }
+                }
+            }
+            
+            renderGrid();
+        }
+        
+        function fillRange() {
+            const value = parseInt(tileValueInput.value);
+            const x1 = parseInt(x1Input.value);
+            const y1 = parseInt(y1Input.value);
+            const x2 = parseInt(x2Input.value);
+            const y2 = parseInt(y2Input.value);
+            
+            const startX = Math.min(x1, x2);
+            const endX = Math.max(x1, x2);
+            const startY = Math.min(y1, y2);
+            const endY = Math.max(y1, y2);
+            
+            for (let y = startY; y <= endY; y++) {
+                for (let x = startX; x <= endX; x++) {
+                    if (y >= 0 && y < tileset.length && x >= 0 && x < tileset[0].length) {
+                        tileset[y][x] = value;
+                    }
+                }
+            }
+            
+            renderGrid();
+            updateJsonOutput();
+        }
+        
+        function selectRow() {
+            const row = parseInt(rowNumberInput.value);
+            if (row >= 0 && row < tileset.length) {
+                selectedTiles = [];
+                for (let x = 0; x < tileset[0].length; x++) {
+                    selectedTiles.push({x, y: row});
+                }
+                renderGrid();
+            }
+        }
+        
+        function selectColumn() {
+            const col = parseInt(colNumberInput.value);
+            if (col >= 0 && col < tileset[0].length) {
+                selectedTiles = [];
+                for (let y = 0; y < tileset.length; y++) {
+                    selectedTiles.push({x: col, y});
+                }
+                renderGrid();
+            }
+        }
+        
+        // JSON output
+        function updateJsonOutput() {
+            const output = {
+                tileset: "tileset.png", // You can modify this to be editable
+                terrain: tileset
+            };
+            jsonOutput.value = JSON.stringify(output, null, 0);
+        }
+        
+        function copyJsonToClipboard() {
+            jsonOutput.select();
+            document.execCommand('copy');
+            alert('JSON copied to clipboard!');
+        }
+        
+        // Initialize with a default tileset
+        createTileSet();
+    </script>
+</body>
+</html>
